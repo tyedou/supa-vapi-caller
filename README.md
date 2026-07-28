@@ -42,8 +42,41 @@ live in Vercel's environment variables.
 
 ### 3. Vapi
 
-Create an assistant and buy/import a phone number in the Vapi dashboard. Note
-the assistant ID, the phone number ID, and your private API key.
+All three values come from [dashboard.vapi.ai](https://dashboard.vapi.ai).
+
+**Private API key** — Organization Settings → API Keys. Take the *private* key,
+not the public one. The public key is for browser-side web calls; this app
+places calls server-side.
+
+**Phone number** → `VAPI_PHONE_NUMBER_ID`. Phone Numbers → create a free US
+number, or import one from Twilio/Vonage. Free Vapi numbers only dial US
+destinations — import your own if you need to call elsewhere. Click the number
+to find its ID.
+
+**Assistant** → `VAPI_ASSISTANT_ID`. Assistants → create one. The ID is shown on
+the assistant's page.
+
+The agent can behave however you like. This one is a short daily check-in, which
+produces summaries worth reading back:
+
+> You are a friendly assistant making a short check-in call. Greet the person,
+> ask how their day is going, and ask if there is anything they are working on
+> or need to remember. Keep the call under two minutes. Be warm and brief, never
+> pushy. When the conversation reaches a natural end, thank them and say
+> goodbye.
+
+Set the first message to something like *"Hi! Just checking in — how's your day
+going?"*
+
+Summaries are generated automatically for every call and land in
+`message.analysis.summary`, so nothing extra needs enabling. To change how they
+read, set a custom `summaryPrompt` in the assistant's analysis plan.
+
+**Webhook** — on the assistant, set the Server URL to
+`https://<your-app>.vercel.app/api/vapi-webhook` and the secret to the same
+string as `VAPI_WEBHOOK_SECRET`. Vapi sends it as the `X-Vapi-Secret` header.
+You can only fill this in after the first Vercel deploy, since the URL doesn't
+exist until then.
 
 ### 4. Deploy to Vercel
 

@@ -1,8 +1,10 @@
+// Supabase client. Anon key is public; RLS enforces access.
 const supabaseUrl = "https://ieubbcixvmdbjyplficb.supabase.co";
 const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlldWJiY2l4dm1kYmp5cGxmaWNiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUxNjU3MDcsImV4cCI6MjEwMDc0MTcwN30.ji1bvFQVyHbMEKZ-RNse2NmMT0tFgxzc2DPYE254p0A";
 
 const supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey);
 
+// Page elements.
 const authView = document.getElementById("authView");
 const appView = document.getElementById("appView");
 const authStatus = document.getElementById("authStatus");
@@ -11,15 +13,18 @@ const userEmail = document.getElementById("userEmail");
 const phoneInput = document.getElementById("phoneInput");
 const callsDiv = document.getElementById("calls");
 
+// Writes a status line, red when it is an error.
 function setStatus(el, message, isError) {
   el.textContent = message;
   el.className = isError ? "status error" : "status";
 }
 
+// Strips formatting so the number reaches Vapi as E.164.
 function normalizePhone(raw) {
   return raw.trim().replace(/[\s()\-.]/g, "");
 }
 
+// Create an account.
 document.getElementById("signupBtn").addEventListener("click", async () => {
   const email = document.getElementById("signupEmail").value;
   const password = document.getElementById("signupPassword").value;
@@ -35,6 +40,7 @@ document.getElementById("signupBtn").addEventListener("click", async () => {
   }
 });
 
+// Log in.
 document.getElementById("loginBtn").addEventListener("click", async () => {
   const email = document.getElementById("loginEmail").value;
   const password = document.getElementById("loginPassword").value;
@@ -44,10 +50,12 @@ document.getElementById("loginBtn").addEventListener("click", async () => {
   if (error) setStatus(authStatus, error.message, true);
 });
 
+// Log out.
 document.getElementById("logoutBtn").addEventListener("click", async () => {
   await supabaseClient.auth.signOut();
 });
 
+// Loads the saved number into the input.
 async function loadProfile(user) {
   const { data, error } = await supabaseClient
     .from("profiles")
@@ -62,6 +70,7 @@ async function loadProfile(user) {
   phoneInput.value = (data && data.phone_number) || "";
 }
 
+// Validates and saves the number to the user profile.
 document.getElementById("saveBtn").addEventListener("click", async () => {
   const user = (await supabaseClient.auth.getUser()).data.user;
   if (!user) return;
@@ -84,6 +93,7 @@ document.getElementById("saveBtn").addEventListener("click", async () => {
   }
 });
 
+// Renders the call history. RLS limits rows to this user.
 async function loadCalls() {
   const { data, error } = await supabaseClient
     .from("calls")
@@ -119,8 +129,10 @@ async function loadCalls() {
   });
 }
 
+// Re-check for summaries that arrived by webhook.
 document.getElementById("refreshBtn").addEventListener("click", loadCalls);
 
+// Call Now. Disabled while in flight so one click is one call.
 const callBtn = document.getElementById("callBtn");
 
 callBtn.addEventListener("click", async () => {
@@ -153,6 +165,7 @@ callBtn.addEventListener("click", async () => {
   }
 });
 
+// Swaps between the logged-out and logged-in views.
 supabaseClient.auth.onAuthStateChange((_event, session) => {
   if (session) {
     authView.classList.add("hidden");

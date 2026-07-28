@@ -1,8 +1,10 @@
+// POST /api/call - places a Vapi call to the signed-in user saved number.
 module.exports = async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
+  // Server-side config. Never exposed to the browser.
   const {
     SUPABASE_URL,
     SUPABASE_SERVICE_ROLE_KEY,
@@ -11,6 +13,7 @@ module.exports = async function handler(req, res) {
     VAPI_PHONE_NUMBER_ID,
   } = process.env;
 
+  // Name any missing vars so failures are diagnosable.
   const missing = Object.entries({
     SUPABASE_URL,
     SUPABASE_SERVICE_ROLE_KEY,
@@ -29,6 +32,7 @@ module.exports = async function handler(req, res) {
     });
   }
 
+  // Identify the caller from their Supabase access token.
   const token = (req.headers.authorization || "").replace(/^Bearer /, "");
   if (!token) return res.status(401).json({ error: "Not signed in." });
 
@@ -41,6 +45,7 @@ module.exports = async function handler(req, res) {
   if (!userRes.ok) return res.status(401).json({ error: "Invalid session." });
   const user = await userRes.json();
 
+  // Read their saved number. Service role bypasses RLS, so scope by id.
   const profileRes = await fetch(
     `${SUPABASE_URL}/rest/v1/profiles?id=eq.${user.id}&select=phone_number`,
     {
@@ -54,6 +59,7 @@ module.exports = async function handler(req, res) {
   const phone = rows[0] && rows[0].phone_number;
   if (!phone) return res.status(400).json({ error: "Save a phone number first." });
 
+  // Place the call. User id rides along so the webhook can attribute it.
   const vapiRes = await fetch("https://api.vapi.ai/call", {
     method: "POST",
     headers: {

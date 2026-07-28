@@ -1,10 +1,13 @@
+// POST /api/vapi-webhook - stores the call summary Vapi sends after hangup.
 module.exports = async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
+  // Server-side config.
   const { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, VAPI_WEBHOOK_SECRET } = process.env;
 
+  // Fail closed: no secret configured means no writes accepted.
   const missing = Object.entries({
     SUPABASE_URL,
     SUPABASE_SERVICE_ROLE_KEY,
@@ -18,10 +21,12 @@ module.exports = async function handler(req, res) {
       error: `Missing environment variable(s): ${missing.join(", ")}.`,
     });
   }
+  // Reject anything not signed with the shared secret.
   if (req.headers["x-vapi-secret"] !== VAPI_WEBHOOK_SECRET) {
     return res.status(401).json({ error: "Bad secret." });
   }
 
+  // Only the end-of-call report carries a summary.
   const message = req.body && req.body.message;
   if (!message) return res.status(400).json({ error: "No message in body." });
 
@@ -29,6 +34,7 @@ module.exports = async function handler(req, res) {
     return res.status(200).json({ ignored: message.type });
   }
 
+  // Service role headers for the insert.
   const service = {
     apikey: SUPABASE_SERVICE_ROLE_KEY,
     Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
@@ -37,6 +43,7 @@ module.exports = async function handler(req, res) {
 
   const call = message.call || {};
 
+  // Attribute the call: metadata first, dialled number as fallback.
   let userId = call.metadata && call.metadata.supabase_user_id;
 
   if (!userId) {
@@ -55,6 +62,7 @@ module.exports = async function handler(req, res) {
     userId = matches[0].id;
   }
 
+  // Record the completed call.
   const insertRes = await fetch(`${SUPABASE_URL}/rest/v1/calls`, {
     method: "POST",
     headers: { ...service, Prefer: "return=minimal" },

@@ -1,11 +1,3 @@
-// POST /api/vapi-webhook - Vapi posts the end-of-call report here.
-//
-// Set this URL as the assistant's Server URL in the Vapi dashboard, with the
-// secret sent as the X-Vapi-Secret header.
-//
-// Creates the `calls` row. The call is only recorded once it has completed and
-// a summary exists.
-
 module.exports = async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
@@ -13,8 +5,6 @@ module.exports = async function handler(req, res) {
 
   const { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, VAPI_WEBHOOK_SECRET } = process.env;
 
-  // Fail closed on all three: without a configured secret anyone could post
-  // fake summaries.
   const missing = Object.entries({
     SUPABASE_URL,
     SUPABASE_SERVICE_ROLE_KEY,
@@ -35,7 +25,6 @@ module.exports = async function handler(req, res) {
   const message = req.body && req.body.message;
   if (!message) return res.status(400).json({ error: "No message in body." });
 
-  // Vapi sends many event types down the same URL; only this one has the summary.
   if (message.type !== "end-of-call-report") {
     return res.status(200).json({ ignored: message.type });
   }
@@ -48,9 +37,6 @@ module.exports = async function handler(req, res) {
 
   const call = message.call || {};
 
-  // Work out whose call this was. api/call.js attaches the user id as metadata;
-  // if that does not survive the round trip, fall back to matching the dialled
-  // number against a saved profile.
   let userId = call.metadata && call.metadata.supabase_user_id;
 
   if (!userId) {

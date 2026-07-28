@@ -1,13 +1,8 @@
-// ---------------------------------------------------------------- config --
-// The anon key is meant to be public. RLS is what protects your data, which is
-// why schema.sql matters. Never put the service_role key in this file.
-// Must be the same project the anon key below belongs to.
 const supabaseUrl = "https://ieubbcixvmdbjyplficb.supabase.co";
 const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlldWJiY2l4dm1kYmp5cGxmaWNiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUxNjU3MDcsImV4cCI6MjEwMDc0MTcwN30.ji1bvFQVyHbMEKZ-RNse2NmMT0tFgxzc2DPYE254p0A";
 
 const supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey);
 
-// -------------------------------------------------------------- elements --
 const authView = document.getElementById("authView");
 const appView = document.getElementById("appView");
 const authStatus = document.getElementById("authStatus");
@@ -16,18 +11,15 @@ const userEmail = document.getElementById("userEmail");
 const phoneInput = document.getElementById("phoneInput");
 const callsDiv = document.getElementById("calls");
 
-// --------------------------------------------------------------- helpers --
 function setStatus(el, message, isError) {
   el.textContent = message;
   el.className = isError ? "status error" : "status";
 }
 
-// Vapi needs E.164, e.g. +14155552671.
 function normalizePhone(raw) {
   return raw.trim().replace(/[\s()\-.]/g, "");
 }
 
-// ------------------------------------------------------------------ auth --
 document.getElementById("signupBtn").addEventListener("click", async () => {
   const email = document.getElementById("signupEmail").value;
   const password = document.getElementById("signupPassword").value;
@@ -37,7 +29,6 @@ document.getElementById("signupBtn").addEventListener("click", async () => {
   if (error) {
     setStatus(authStatus, error.message, true);
   } else if (!data.session) {
-    // "Confirm email" is on in Supabase, so there's no session yet.
     setStatus(authStatus, "Account created. Check your email to confirm, then log in.");
   } else {
     setStatus(authStatus, "Account created.");
@@ -57,7 +48,6 @@ document.getElementById("logoutBtn").addEventListener("click", async () => {
   await supabaseClient.auth.signOut();
 });
 
-// --------------------------------------------------------------- profile --
 async function loadProfile(user) {
   const { data, error } = await supabaseClient
     .from("profiles")
@@ -82,7 +72,6 @@ document.getElementById("saveBtn").addEventListener("click", async () => {
     return;
   }
 
-  // upsert so the row is created on first save even without the signup trigger
   const { error } = await supabaseClient
     .from("profiles")
     .upsert({ id: user.id, phone_number: phone });
@@ -95,9 +84,7 @@ document.getElementById("saveBtn").addEventListener("click", async () => {
   }
 });
 
-// ----------------------------------------------------------------- calls --
 async function loadCalls() {
-  // No filter on "user" needed: RLS returns only this user's rows.
   const { data, error } = await supabaseClient
     .from("calls")
     .select("id, summary, call_time")
@@ -134,13 +121,18 @@ async function loadCalls() {
 
 document.getElementById("refreshBtn").addEventListener("click", loadCalls);
 
-document.getElementById("callBtn").addEventListener("click", async () => {
+const callBtn = document.getElementById("callBtn");
+
+callBtn.addEventListener("click", async () => {
+  if (callBtn.disabled) return;
+  callBtn.disabled = true;
   setStatus(appStatus, "Starting call…");
 
-  // The Vapi private key lives on the server, so the browser asks /api/call to
-  // place the call and proves who it is with the Supabase access token.
   const session = (await supabaseClient.auth.getSession()).data.session;
-  if (!session) return;
+  if (!session) {
+    callBtn.disabled = false;
+    return;
+  }
 
   try {
     const res = await fetch("/api/call", {
@@ -153,16 +145,14 @@ document.getElementById("callBtn").addEventListener("click", async () => {
       setStatus(appStatus, body.error || "Call failed.", true);
       return;
     }
-    // The call row is written by the webhook when the call ends, so there is
-    // nothing to show until then. Refresh picks it up.
     setStatus(appStatus, "Calling you now. Hit Refresh after the call to see the summary.");
   } catch (err) {
-    // Opening index.html from disk has no /api - it only works once deployed.
     setStatus(appStatus, "Could not reach /api/call. Is the app deployed?", true);
+  } finally {
+    setTimeout(() => { callBtn.disabled = false; }, 5000);
   }
 });
 
-// ------------------------------------------------------------------ init --
 supabaseClient.auth.onAuthStateChange((_event, session) => {
   if (session) {
     authView.classList.add("hidden");

@@ -19,11 +19,23 @@ module.exports = async function handler(req, res) {
     VAPI_PHONE_NUMBER_ID,
   } = process.env;
 
-  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-    return res.status(500).json({ error: "Supabase env vars are not set." });
-  }
-  if (!VAPI_API_KEY || !VAPI_ASSISTANT_ID || !VAPI_PHONE_NUMBER_ID) {
-    return res.status(500).json({ error: "Vapi is not configured yet." });
+  // Name the missing variables: "not configured" alone is painful to debug.
+  const missing = Object.entries({
+    SUPABASE_URL,
+    SUPABASE_SERVICE_ROLE_KEY,
+    VAPI_API_KEY,
+    VAPI_ASSISTANT_ID,
+    VAPI_PHONE_NUMBER_ID,
+  })
+    .filter(([, v]) => !v)
+    .map(([k]) => k);
+
+  if (missing.length) {
+    return res.status(500).json({
+      error:
+        `Missing environment variable(s): ${missing.join(", ")}. ` +
+        "Set them in Vercel -> Settings -> Environment Variables, then redeploy.",
+    });
   }
 
   // 1. Identify the caller from the Supabase access token the browser sent.

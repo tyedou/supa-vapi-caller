@@ -13,13 +13,20 @@ module.exports = async function handler(req, res) {
 
   const { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, VAPI_WEBHOOK_SECRET } = process.env;
 
-  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-    return res.status(500).json({ error: "Supabase env vars are not set." });
-  }
+  // Fail closed on all three: without a configured secret anyone could post
+  // fake summaries.
+  const missing = Object.entries({
+    SUPABASE_URL,
+    SUPABASE_SERVICE_ROLE_KEY,
+    VAPI_WEBHOOK_SECRET,
+  })
+    .filter(([, v]) => !v)
+    .map(([k]) => k);
 
-  // Fail closed: without a configured secret anyone could post fake summaries.
-  if (!VAPI_WEBHOOK_SECRET) {
-    return res.status(500).json({ error: "VAPI_WEBHOOK_SECRET is not set." });
+  if (missing.length) {
+    return res.status(500).json({
+      error: `Missing environment variable(s): ${missing.join(", ")}.`,
+    });
   }
   if (req.headers["x-vapi-secret"] !== VAPI_WEBHOOK_SECRET) {
     return res.status(401).json({ error: "Bad secret." });

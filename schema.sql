@@ -1,5 +1,9 @@
 -- Paste this into Supabase Studio -> SQL Editor and run it once.
 -- Idempotent: safe to re-run.
+--
+-- `create table if not exists` does nothing when a table of that name already
+-- exists, even if its columns differ. The `add column if not exists` blocks
+-- below are what bring an existing, partially-built table up to date.
 
 -- ---------------------------------------------------------------- profiles --
 create table if not exists public.profiles (
@@ -7,6 +11,9 @@ create table if not exists public.profiles (
   phone_number text,
   created_at   timestamptz not null default now()
 );
+
+alter table public.profiles add column if not exists phone_number text;
+alter table public.profiles add column if not exists created_at timestamptz not null default now();
 
 alter table public.profiles enable row level security;
 
@@ -38,6 +45,23 @@ create table if not exists public.calls (
   started_at   timestamptz not null default now(),
   ended_at     timestamptz
 );
+
+-- Brings an existing `calls` table up to the shape the app expects.
+-- user_id is added nullable so this succeeds even if the table already has
+-- rows; pre-existing rows with a null user_id are invisible under RLS.
+-- api/call.js does not send an id, so the column must generate its own.
+alter table public.calls alter column id set default gen_random_uuid();
+alter table public.calls add column if not exists user_id uuid references auth.users (id) on delete cascade;
+alter table public.calls add column if not exists vapi_call_id text;
+alter table public.calls add column if not exists summary text;
+alter table public.calls add column if not exists transcript text;
+alter table public.calls add column if not exists status text;
+alter table public.calls add column if not exists started_at timestamptz not null default now();
+alter table public.calls add column if not exists ended_at timestamptz;
+
+-- The webhook matches on vapi_call_id, so it has to be unique.
+create unique index if not exists calls_vapi_call_id_key
+  on public.calls (vapi_call_id);
 
 create index if not exists calls_user_id_started_at_idx
   on public.calls (user_id, started_at desc);

@@ -1,8 +1,9 @@
 // ---------------------------------------------------------------- config --
 // The anon key is meant to be public. RLS is what protects your data, which is
 // why schema.sql matters. Never put the service_role key in this file.
-const supabaseUrl = "https://omlopfgdlizxsoksnboq.supabase.co";
-const supabaseKey = "PASTE_YOUR_SUPABASE_ANON_KEY_HERE";
+// Must be the same project the anon key below belongs to.
+const supabaseUrl = "https://ieubbcixvmdbjyplficb.supabase.co";
+const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlldWJiY2l4dm1kYmp5cGxmaWNiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUxNjU3MDcsImV4cCI6MjEwMDc0MTcwN30.ji1bvFQVyHbMEKZ-RNse2NmMT0tFgxzc2DPYE254p0A";
 
 const supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey);
 

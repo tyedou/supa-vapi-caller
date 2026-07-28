@@ -1,106 +1,119 @@
 # supa-vapi-caller
 
-Next.js 16 + Supabase. Users sign up, save a phone number to their profile, and
-review their call history. Vapi calling is not wired up yet — see
-[Not built yet](#not-built-yet).
+A barebones static frontend on Supabase, with two serverless functions for Vapi.
+No framework, no build step, no `node_modules`.
 
-## Stack
-
-- **Next.js 16.2** (App Router, Turbopack, React 19.2)
-- **Supabase** — Postgres, Auth, Row Level Security
-- **Tailwind CSS 4**
-- **Vercel** — auto-deploys on push to `main`
-
-## Local setup
-
-```bash
-npm install
-cp .env.example .env.local   # then fill in your Supabase values
-npm run dev
+```
+index.html            sign up / log in, phone number, Call Now, call history
+app.js                all frontend logic (Supabase JS from CDN)
+api/call.js           starts a Vapi call to the user's saved number
+api/vapi-webhook.js   receives the end-of-call summary from Vapi
+schema.sql            tables, RLS policies, signup trigger
 ```
 
-`.env.local` needs:
+## Why the two `api/` files exist
 
-| Variable | Where to find it |
-| --- | --- |
-| `NEXT_PUBLIC_SUPABASE_URL` | Supabase → Project Settings → API → Project URL |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase → Project Settings → API → anon/public key |
+Everything else talks to Supabase directly from the browser. These two can't:
 
-### Database
+- **`api/call.js`** holds the Vapi *private* key. Anything in `app.js` is
+  readable by anyone who opens DevTools.
+- **`api/vapi-webhook.js`** is a URL Vapi can POST to. A static file can't
+  receive a POST.
 
-The app expects `profiles` and `calls` as defined in
-[`supabase/schema.sql`](supabase/schema.sql). That file is idempotent — run it in
-Supabase Studio → SQL Editor to create anything missing and confirm the RLS
-policies match what the app assumes.
+Both are dependency-free — plain `fetch` against Supabase's REST API.
 
-Two things it sets up that are easy to miss:
+## Setup
 
-- An **INSERT policy on `profiles`**. The save action upserts, so without it the
-  first save fails for a user who has no profile row.
-- A trigger that creates a `profiles` row on signup. The upsert covers this too,
-  so the trigger is belt-and-braces.
+### 1. Database
 
-### Auth
+Paste [`schema.sql`](schema.sql) into Supabase Studio → SQL Editor and run it.
+It creates `profiles` and `calls`, enables RLS, and adds a trigger that creates
+a profile row on signup.
 
-Under Supabase → Authentication → URL Configuration, add
-`http://localhost:3000/auth/callback` and
-`https://<your-app>.vercel.app/auth/callback` as redirect URLs. Signup uses email
-confirmation by default; disable it under Authentication → Providers → Email if
+### 2. Frontend key
+
+In `app.js`, replace `PASTE_YOUR_SUPABASE_ANON_KEY_HERE` with your anon key
+(Supabase → Project Settings → API).
+
+The anon key belongs in client code and is safe to commit — it identifies the
+project, it doesn't grant access. RLS is what protects the data. The
+`service_role` key is the opposite: it bypasses RLS entirely and must only ever
+live in Vercel's environment variables.
+
+### 3. Vapi
+
+Create an assistant and buy/import a phone number in the Vapi dashboard. Note
+the assistant ID, the phone number ID, and your private API key.
+
+### 4. Deploy to Vercel
+
+1. [vercel.com](https://vercel.com) → sign in with GitHub.
+2. **Add New → Project** → import this repo.
+3. Framework preset: **Other**. No build command, no output directory — Vercel
+   serves `index.html` from the root and turns each file in `api/` into a
+   serverless function automatically.
+4. Add these environment variables (Production + Preview):
+
+   | Variable | Value |
+   | --- | --- |
+   | `SUPABASE_URL` | `https://<project-ref>.supabase.co` |
+   | `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Settings → API → `service_role` |
+   | `VAPI_API_KEY` | Vapi private key |
+   | `VAPI_ASSISTANT_ID` | Vapi assistant ID |
+   | `VAPI_PHONE_NUMBER_ID` | Vapi phone number ID |
+   | `VAPI_WEBHOOK_SECRET` | Any string you invent |
+
+5. Deploy.
+
+Every push to `main` is a production deploy from then on. Every PR gets a
+preview URL.
+
+### 5. Point Vapi at the webhook
+
+In the Vapi dashboard, set the assistant's Server URL to
+`https://<your-app>.vercel.app/api/vapi-webhook` and the secret to the same
+value as `VAPI_WEBHOOK_SECRET`. Vapi sends it as the `X-Vapi-Secret` header.
+
+### 6. Supabase redirect URLs
+
+Under Authentication → URL Configuration, add your Vercel URL. Signup uses email
+confirmation by default; turn it off under Authentication → Providers → Email if
 you'd rather skip the inbox round trip while testing.
 
-## Deploying to Vercel
+## Running locally
 
-1. Push to GitHub (already wired to `origin`).
-2. At [vercel.com/new](https://vercel.com/new), import `tyedou/supa-vapi-caller`.
-3. Add `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` under
-   Environment Variables for Production, Preview, and Development.
-4. Deploy.
+Open `index.html` in a browser and auth, saving a phone number, and the call
+list all work — they go straight to Supabase.
 
-After the first import, every push to `main` triggers a production deploy and
-every PR gets a preview deploy. No `vercel.json` is needed — Next.js is detected
-automatically.
+**Call Now will not work locally.** There is no `/api` when you open a file from
+disk; it only exists once deployed. The button reports this rather than failing
+silently. To exercise it locally, use `npx vercel dev`.
 
-## How auth is enforced
-
-Three layers, because the proxy alone is not sufficient:
-
-- **`proxy.ts`** refreshes the Supabase session cookie on every request and
-  redirects signed-out users to `/login`. Next 16 renamed the `middleware`
-  convention to `proxy`, and it always runs on the Node.js runtime.
-- **Server Components and Server Actions** call `supabase.auth.getUser()`
-  themselves. The Next.js docs warn that a matcher change can silently drop
-  proxy coverage for a Server Function, so auth is re-checked at the point of
-  use.
-- **Row Level Security** is the actual boundary. Every policy is scoped to
-  `auth.uid()`, so even a query with no `where` clause returns only the caller's
-  rows.
-
-## Layout
+## How the pieces connect
 
 ```
-app/
-  auth/actions.ts        signIn / signUp / signOut server actions
-  auth/callback/route.ts exchanges the email-confirmation code for a session
-  dashboard/             phone number form + call history (auth required)
-  login/                 combined sign-in / sign-up form
-lib/supabase/
-  client.ts              browser client
-  server.ts              server client (cookies() is async in Next 16)
-proxy.ts                 session refresh + route protection
-supabase/schema.sql      tables, RLS policies, signup trigger
+Call Now  ->  POST /api/call  (with the user's Supabase access token)
+                 |  verifies the token, reads profiles.phone_number
+                 |  POST https://api.vapi.ai/call
+                 |  inserts a calls row holding vapi_call_id + user_id
+                 v
+              Vapi rings the user's phone
+                 |
+                 v  after hangup
+              POST /api/vapi-webhook
+                 |  checks X-Vapi-Secret
+                 |  PATCHes the calls row matched on vapi_call_id
+                 v
+              summary appears in the user's call history
 ```
 
-## Not built yet
+The `user_id` is attached when the call is created, never taken from the
+webhook payload — so a forged webhook can't write a summary onto someone else's
+account.
 
-Vapi integration was deliberately deferred. What remains:
+## Data isolation
 
-- `POST /api/call` — create a Vapi call to the user's saved number and insert a
-  `calls` row with the returned `vapi_call_id`.
-- `POST /api/vapi/webhook` — handle the `end-of-call-report` event and write
-  `message.analysis.summary` and `message.artifact.transcript` onto the matching
-  `calls` row, matched by `message.call.id`.
-- A "Call Now" button on the dashboard.
-
-The webhook must use `SUPABASE_SERVICE_ROLE_KEY` (it has no user session, and
-`calls` has no user-facing INSERT policy) and should verify a shared secret
-before trusting the payload.
+Every policy in `schema.sql` is scoped to `auth.uid()`, so the queries in
+`app.js` return only the signed-in user's rows even though they carry no
+`user_id` filter. `calls` has no user-facing INSERT or UPDATE policy at all;
+those rows are written only by the two server functions.

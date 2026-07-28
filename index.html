@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vapi Caller</title>
+    <style>
+        body { font-family: system-ui, sans-serif; max-width: 640px; margin: 40px auto; padding: 0 16px; line-height: 1.5; }
+        input, button { font: inherit; padding: 6px 10px; margin: 2px 0; }
+        button { cursor: pointer; }
+        .hidden { display: none; }
+        .status { min-height: 1.4em; color: #555; }
+        .error { color: #b00; }
+        .call { border: 1px solid #ddd; border-radius: 6px; padding: 10px; margin-bottom: 10px; }
+        .call-meta { font-size: 0.85em; color: #666; }
+    </style>
+</head>
+<body>
+
+    <h1>Vapi Caller</h1>
+
+    <!-- Shown when signed out -->
+    <div id="authView">
+        <h2>Sign Up</h2>
+        <input id="signupEmail" type="email" placeholder="Email">
+        <input id="signupPassword" type="password" placeholder="Password">
+        <button id="signupBtn">Sign Up</button>
+
+        <h2>Login</h2>
+        <input id="loginEmail" type="email" placeholder="Email">
+        <input id="loginPassword" type="password" placeholder="Password">
+        <button id="loginBtn">Login</button>
+
+        <p id="authStatus" class="status"></p>
+    </div>
+
+    <!-- Shown when signed in -->
+    <div id="appView" class="hidden">
+        <p>Signed in as <strong id="userEmail"></strong>
+           <button id="logoutBtn">Logout</button></p>
+
+        <h2>Your phone number</h2>
+        <input id="phoneInput" type="tel" placeholder="+14155552671">
+        <button id="saveBtn">Save</button>
+        <button id="callBtn">Call Now</button>
+        <p id="appStatus" class="status"></p>
+
+        <h2>Call history</h2>
+        <button id="refreshBtn">Refresh</button>
+        <div id="calls"></div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="app.js"></script>
+
+</body>
+</html>

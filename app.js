@@ -97,11 +97,11 @@ document.getElementById("saveBtn").addEventListener("click", async () => {
 
 // ----------------------------------------------------------------- calls --
 async function loadCalls() {
-  // No user_id filter needed: RLS returns only this user's rows.
+  // No filter on "user" needed: RLS returns only this user's rows.
   const { data, error } = await supabaseClient
     .from("calls")
-    .select("id, summary, status, started_at")
-    .order("started_at", { ascending: false });
+    .select("id, summary, call_time")
+    .order("call_time", { ascending: false });
 
   if (error) {
     callsDiv.textContent = error.message;
@@ -119,8 +119,9 @@ async function loadCalls() {
 
     const meta = document.createElement("div");
     meta.className = "call-meta";
-    const when = call.started_at ? new Date(call.started_at).toLocaleString() : "unknown time";
-    meta.textContent = when + " — " + (call.status || "unknown");
+    meta.textContent = call.call_time
+      ? new Date(call.call_time).toLocaleString()
+      : "unknown time";
 
     const summary = document.createElement("div");
     summary.textContent = call.summary || "No summary yet.";
@@ -152,8 +153,9 @@ document.getElementById("callBtn").addEventListener("click", async () => {
       setStatus(appStatus, body.error || "Call failed.", true);
       return;
     }
-    setStatus(appStatus, "Calling you now. The summary appears below once the call ends.");
-    loadCalls();
+    // The call row is written by the webhook when the call ends, so there is
+    // nothing to show until then. Refresh picks it up.
+    setStatus(appStatus, "Calling you now. Hit Refresh after the call to see the summary.");
   } catch (err) {
     // Opening index.html from disk has no /api - it only works once deployed.
     setStatus(appStatus, "Could not reach /api/call. Is the app deployed?", true);

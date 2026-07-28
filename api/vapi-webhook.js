@@ -2,6 +2,9 @@
 //
 // Set this URL as the assistant's Server URL in the Vapi dashboard, with the
 // secret sent as the X-Vapi-Secret header.
+//
+// Creates the `calls` row. The call is only recorded once it has completed and
+// a summary exists.
 
 module.exports = async function handler(req, res) {
   if (req.method !== "POST") {
@@ -30,34 +33,47 @@ module.exports = async function handler(req, res) {
     return res.status(200).json({ ignored: message.type });
   }
 
-  const vapiCallId = message.call && message.call.id;
-  if (!vapiCallId) return res.status(400).json({ error: "No call id." });
-
-  const patch = {
-    summary: (message.analysis && message.analysis.summary) || null,
-    transcript: (message.artifact && message.artifact.transcript) || null,
-    status: "ended",
-    ended_at: new Date().toISOString(),
+  const service = {
+    apikey: SUPABASE_SERVICE_ROLE_KEY,
+    Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+    "Content-Type": "application/json",
   };
 
-  // Matched on vapi_call_id, which /api/call stored alongside the user_id, so
-  // the summary lands on the right user's row.
-  const updateRes = await fetch(
-    `${SUPABASE_URL}/rest/v1/calls?vapi_call_id=eq.${encodeURIComponent(vapiCallId)}`,
-    {
-      method: "PATCH",
-      headers: {
-        apikey: SUPABASE_SERVICE_ROLE_KEY,
-        Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-        "Content-Type": "application/json",
-        Prefer: "return=minimal",
-      },
-      body: JSON.stringify(patch),
-    }
-  );
+  const call = message.call || {};
 
-  if (!updateRes.ok) {
-    const detail = await updateRes.text();
+  // Work out whose call this was. api/call.js attaches the user id as metadata;
+  // if that does not survive the round trip, fall back to matching the dialled
+  // number against a saved profile.
+  let userId = call.metadata && call.metadata.supabase_user_id;
+
+  if (!userId) {
+    const number = call.customer && call.customer.number;
+    if (!number) {
+      return res.status(400).json({ error: "Cannot attribute call to a user." });
+    }
+    const lookup = await fetch(
+      `${SUPABASE_URL}/rest/v1/profiles?phone_number=eq.${encodeURIComponent(number)}&select=id`,
+      { headers: service }
+    );
+    const matches = await lookup.json();
+    if (!matches.length) {
+      return res.status(404).json({ error: "No profile with that phone number." });
+    }
+    userId = matches[0].id;
+  }
+
+  const insertRes = await fetch(`${SUPABASE_URL}/rest/v1/calls`, {
+    method: "POST",
+    headers: { ...service, Prefer: "return=minimal" },
+    body: JSON.stringify({
+      user: userId,
+      summary: (message.analysis && message.analysis.summary) || null,
+      call_time: new Date().toISOString(),
+    }),
+  });
+
+  if (!insertRes.ok) {
+    const detail = await insertRes.text();
     return res.status(500).json({ error: "Could not store summary.", detail });
   }
 

@@ -95,25 +95,47 @@ silently. To exercise it locally, use `npx vercel dev`.
 Call Now  ->  POST /api/call  (with the user's Supabase access token)
                  |  verifies the token, reads profiles.phone_number
                  |  POST https://api.vapi.ai/call
-                 |  inserts a calls row holding vapi_call_id + user_id
+                 |  attaches the user id as Vapi metadata
                  v
               Vapi rings the user's phone
                  |
                  v  after hangup
               POST /api/vapi-webhook
                  |  checks X-Vapi-Secret
-                 |  PATCHes the calls row matched on vapi_call_id
+                 |  inserts a calls row with the summary
                  v
-              summary appears in the user's call history
+              Refresh shows it in the user's call history
 ```
 
-The `user_id` is attached when the call is created, never taken from the
-webhook payload — so a forged webhook can't write a summary onto someone else's
-account.
+A row is written only when a call completes, so the history holds finished
+calls with real summaries rather than placeholder rows.
+
+### How the summary finds the right user
+
+`calls` has no `vapi_call_id` column, so the webhook identifies the user two
+ways, in order:
+
+1. **Metadata** — `api/call.js` sends `metadata.supabase_user_id` when placing
+   the call, and reads it back off `message.call.metadata`. Exact.
+2. **Phone number** — if the metadata doesn't survive the round trip, the
+   dialled number from `message.call.customer.number` is matched against
+   `profiles.phone_number`.
+
+The fallback exists because Vapi's docs don't explicitly guarantee custom
+metadata propagates into `end-of-call-report`. Note its one weakness: if two
+accounts save the same phone number, the fallback can attribute a call to
+either. The metadata path has no such ambiguity.
+
+Either way the user id comes from the call Vapi was *asked* to place, never
+from a user id in the webhook body — so a forged webhook can't write a summary
+onto someone else's account.
 
 ## Data isolation
 
-Every policy in `schema.sql` is scoped to `auth.uid()`, so the queries in
-`app.js` return only the signed-in user's rows even though they carry no
-`user_id` filter. `calls` has no user-facing INSERT or UPDATE policy at all;
-those rows are written only by the two server functions.
+Both policies in `schema.sql` are scoped to `auth.uid()`, so the queries in
+`app.js` return only the signed-in user's rows even though they carry no filter
+on `"user"`. Note that `"user"` is a reserved word in Postgres and has to be
+double-quoted everywhere it appears in SQL.
+
+The two server functions use the `service_role` key, which bypasses RLS
+entirely — which is exactly why it must never appear in `app.js`.
